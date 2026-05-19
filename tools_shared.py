@@ -99,6 +99,34 @@ def _fetch_with_playwright(url: str) -> str:
     return html
 
 
+def _fetch_with_gemini_url_context(url: str) -> str:
+    """
+    Last-resort fetch via Gemini URL context — used when the server IP is
+    Cloudflare-blocked. Asks Gemini to read the page and return a minimal
+    HTML stub containing <a> tags for every submission it finds, so the
+    existing BeautifulSoup link-extraction pipeline can process it normally.
+    """
+    from agent import gemini_call
+    prompt = (
+        f"Read this hackathon submissions page: {url}\n\n"
+        "List every project/submission you find on that page. "
+        "Return ONLY a plain HTML snippet — nothing else, no markdown — "
+        "containing one <a> tag per project, like this:\n"
+        '<a href="ABSOLUTE_SUBMISSION_URL">PROJECT TITLE — team: TEAM NAME — DESCRIPTION</a>\n'
+        "Use absolute URLs. If a project URL is relative, prepend the base domain. "
+        "If you cannot find any projects, return exactly: <p>NO_SUBMISSIONS</p>"
+    )
+    try:
+        result = gemini_call(prompt, model_tier="reasoning")
+        if "NO_SUBMISSIONS" in result or not result.strip():
+            return ""
+        logger.info(f"Gemini URL context returned {len(result)} chars for {url}")
+        return result
+    except Exception as exc:
+        logger.error(f"Gemini URL context fetch failed: {exc}")
+        return ""
+
+
 def fetch_page(url: str) -> str:
     url = _normalize_url(url)
     logger.info(f"fetch_page: {url}")
@@ -117,8 +145,10 @@ def fetch_page(url: str) -> str:
             html = _fetch_with_playwright(url)
         except Exception as pw_exc:
             logger.error(f"Playwright failed: {pw_exc}")
-            if not html:
-                return ""
+
+    if not html or _is_js_rendered(html):
+        logger.info(f"Playwright empty/shell for {url}, trying Gemini URL context")
+        html = _fetch_with_gemini_url_context(url)
 
     return html
 
