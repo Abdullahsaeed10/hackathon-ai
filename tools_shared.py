@@ -21,13 +21,34 @@ logger = logging.getLogger(__name__)
 
 _HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
 }
 
 _TIMEOUT = 20
+
+
+def _normalize_url(url: str) -> str:
+    """Normalize known platform URLs to point at their submissions listing page."""
+    parsed = urlparse(url)
+    # lablab.ai: /ai-hackathons/{slug} → /ai-hackathons/{slug}/projects
+    if "lablab.ai" in parsed.netloc:
+        path = parsed.path.rstrip("/")
+        if re.match(r"^/ai-hackathons/[^/]+$", path):
+            url = url.rstrip("/") + "/projects"
+            logger.info(f"lablab.ai URL normalized to {url}")
+    return url
 
 
 # ── fetch_page ─────────────────────────────────────────────────────────────────
@@ -58,25 +79,25 @@ def _fetch_with_playwright(url: str) -> str:
 
 
 def fetch_page(url: str) -> str:
+    url = _normalize_url(url)
     logger.info(f"fetch_page: {url}")
+    html = ""
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
+        session = requests.Session()
+        resp = session.get(url, headers=_HEADERS, timeout=_TIMEOUT, allow_redirects=True)
         resp.raise_for_status()
         html = resp.text
     except Exception as exc:
         logger.warning(f"requests failed for {url}: {exc}; trying Playwright")
+
+    if not html or _is_js_rendered(html):
+        logger.info(f"JS-rendered or empty for {url}, switching to Playwright")
         try:
             html = _fetch_with_playwright(url)
         except Exception as pw_exc:
-            logger.error(f"Playwright also failed: {pw_exc}")
-            return ""
-
-    if _is_js_rendered(html):
-        logger.info(f"JS-rendered detected for {url}, switching to Playwright")
-        try:
-            html = _fetch_with_playwright(url)
-        except Exception as exc:
-            logger.warning(f"Playwright fallback failed: {exc}")
+            logger.error(f"Playwright failed: {pw_exc}")
+            if not html:
+                return ""
 
     return html
 
