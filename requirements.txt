@@ -1,0 +1,11 @@
+google-genai
+flask
+flask-cors
+gevent
+gunicorn
+requests
+beautifulsoup4
+playwright
+pypdf
+pandas
+python-dotenv
