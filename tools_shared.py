@@ -40,14 +40,21 @@ _TIMEOUT = 20
 
 
 def _normalize_url(url: str) -> str:
-    """Normalize known platform URLs to point at their submissions listing page."""
+    """Normalize known platform URLs to point at their submissions listing page.
+
+    lablab.ai serves the full project list on the base event page itself:
+      /ai-hackathons/{slug}   ← has 200+ project anchors in static HTML
+      /event/{slug}           ← same content, alternate path
+    Earlier versions appended /projects, but that path now 404s, which is
+    why production silently returned "no submissions found".
+    """
     parsed = urlparse(url)
-    # lablab.ai: /ai-hackathons/{slug} → /ai-hackathons/{slug}/projects
     if "lablab.ai" in parsed.netloc:
         path = parsed.path.rstrip("/")
-        if re.match(r"^/ai-hackathons/[^/]+$", path):
-            url = url.rstrip("/") + "/projects"
-            logger.info(f"lablab.ai URL normalized to {url}")
+        # Strip a stale trailing /projects we added in older versions
+        if re.match(r"^/ai-hackathons/[^/]+/projects$", path):
+            url = url.rstrip("/").rsplit("/projects", 1)[0]
+            logger.info(f"lablab.ai URL stripped of stale /projects → {url}")
     return url
 
 
@@ -126,15 +133,31 @@ def _fetch_with_gemini_url_context(url: str) -> str:
     )
     try:
         client = genai.Client(api_key=api_key)
+        # gemini-2.0-flash is no longer available — must use 2.5-series.
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 tools=[types.Tool(url_context=types.UrlContext())],
                 temperature=0.1,
             ),
         )
-        result = response.candidates[0].content.parts[0].text if response.candidates else ""
+        # Join text across all response parts (url_context tool emits multiple).
+        result = ""
+        if response.candidates:
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "text", None):
+                    result += part.text
+            # Log whether Gemini actually retrieved the URL.
+            meta = getattr(response.candidates[0], "url_context_metadata", None)
+            if meta and getattr(meta, "url_metadata", None):
+                for m in meta.url_metadata:
+                    logger.info(f"Gemini URL fetch: {m.retrieved_url} → {m.url_retrieval_status}")
+        # Strip optional markdown fences Gemini may add.
+        result = result.strip()
+        if result.startswith("```"):
+            result = re.sub(r"^```(?:html)?\n?", "", result)
+            result = re.sub(r"\n?```$", "", result)
         if not result or "NO_SUBMISSIONS" in result:
             logger.info(f"Gemini URL context found no submissions for {url}")
             return ""

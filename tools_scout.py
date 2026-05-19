@@ -72,7 +72,9 @@ _SUBMISSION_LINK_PATTERNS = [
     re.compile(r"/project-[\w][\w\-]+/[\w][\w\-]+", re.I),
     # devpost: /software/<slug>
     re.compile(r"/software/[\w][\w\-]+", re.I),
-    # lablab.ai: /ai-hackathons/{hackathon}/projects/{slug}
+    # lablab.ai: /ai-hackathons/{event}/{team-slug}/{project-slug} (current real structure)
+    re.compile(r"/ai-hackathons/[\w][\w\-]+/[\w][\w\-]+/[\w][\w\-]+", re.I),
+    # lablab.ai legacy: /ai-hackathons/{hackathon}/projects/{slug}
     re.compile(r"/ai-hackathons/[\w][\w\-]+/projects/[\w][\w\-]+", re.I),
 ]
 
