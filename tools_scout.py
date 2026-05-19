@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 
 import storage
 from agent import gemini_call, get_current_config
-from tools_shared import fetch_page, enrich_project, write_project_description
+from tools_shared import fetch_page, enrich_project, write_project_description, _normalize_url
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ def validate_hackathon_url(url: str) -> dict:
     No Gemini call — fast enough for a pre-flight check.
     Returns {"valid": bool, "submission_count": int, "error": str}.
     """
+    url = _normalize_url(url)
     try:
         html = fetch_page(url)
     except Exception as e:
@@ -71,6 +72,8 @@ _SUBMISSION_LINK_PATTERNS = [
     re.compile(r"/project-[\w][\w\-]+/[\w][\w\-]+", re.I),
     # devpost: /software/<slug>
     re.compile(r"/software/[\w][\w\-]+", re.I),
+    # lablab.ai: /ai-hackathons/{hackathon}/projects/{slug}
+    re.compile(r"/ai-hackathons/[\w][\w\-]+/projects/[\w][\w\-]+", re.I),
 ]
 
 _FLASH_EXTRACT_PROMPT = """\
