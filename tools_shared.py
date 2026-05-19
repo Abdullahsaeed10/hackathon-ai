@@ -101,24 +101,42 @@ def _fetch_with_playwright(url: str) -> str:
 
 def _fetch_with_gemini_url_context(url: str) -> str:
     """
-    Last-resort fetch via Gemini URL context — used when the server IP is
-    Cloudflare-blocked. Asks Gemini to read the page and return a minimal
-    HTML stub containing <a> tags for every submission it finds, so the
-    existing BeautifulSoup link-extraction pipeline can process it normally.
+    Last-resort fetch via Gemini URL context tool — used when the server IP is
+    Cloudflare-blocked. Gemini browses the URL through Google's infrastructure
+    and returns a minimal HTML stub with <a> tags for every submission found.
     """
-    from agent import gemini_call
+    import os
+    from google import genai
+    from google.genai import types
+
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return ""
+
     prompt = (
-        f"Read this hackathon submissions page: {url}\n\n"
-        "List every project/submission you find on that page. "
-        "Return ONLY a plain HTML snippet — nothing else, no markdown — "
-        "containing one <a> tag per project, like this:\n"
-        '<a href="ABSOLUTE_SUBMISSION_URL">PROJECT TITLE — team: TEAM NAME — DESCRIPTION</a>\n'
-        "Use absolute URLs. If a project URL is relative, prepend the base domain. "
-        "If you cannot find any projects, return exactly: <p>NO_SUBMISSIONS</p>"
+        f"Browse this hackathon submissions page: {url}\n\n"
+        "Find every project/submission listed on that page. "
+        "Return ONLY a plain HTML snippet — no markdown, no explanation — "
+        "with one <a> tag per project:\n"
+        '<a href="ABSOLUTE_URL_TO_PROJECT_PAGE">PROJECT TITLE | TEAM | SHORT DESCRIPTION</a>\n\n'
+        "Rules:\n"
+        "- Use the actual absolute URL to each project's own page\n"
+        "- Do NOT invent projects — only list what you actually see on the page\n"
+        "- If you find no projects, return exactly: <p>NO_SUBMISSIONS</p>"
     )
     try:
-        result = gemini_call(prompt, model_tier="reasoning")
-        if "NO_SUBMISSIONS" in result or not result.strip():
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(url_context=types.UrlContext())],
+                temperature=0.1,
+            ),
+        )
+        result = response.candidates[0].content.parts[0].text if response.candidates else ""
+        if not result or "NO_SUBMISSIONS" in result:
+            logger.info(f"Gemini URL context found no submissions for {url}")
             return ""
         logger.info(f"Gemini URL context returned {len(result)} chars for {url}")
         return result
