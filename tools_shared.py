@@ -67,10 +67,31 @@ def _fetch_with_playwright(url: str) -> str:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, args=["--no-sandbox"])
-        page = browser.new_page()
+        browser = pw.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+            ],
+        )
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 800},
+            locale="en-US",
+            extra_http_headers={
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+        )
+        page = context.new_page()
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         try:
-            page.goto(url, timeout=30_000, wait_until="networkidle")
+            page.goto(url, timeout=45_000, wait_until="networkidle")
+            time.sleep(3)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(2)
             html = page.content()
         finally:
