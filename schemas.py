@@ -84,19 +84,19 @@ PARSE_RULES = {
 
 # ── Scout-only ─────────────────────────────────────────────────────────────────
 
-EXTRACT_PROJECTS_FROM_HTML = {
-    "name": "extract_projects_from_html",
+FETCH_AND_EXTRACT_PROJECTS = {
+    "name": "fetch_and_extract_projects",
     "description": (
-        "Parse hackathon submission listing HTML and return a list of shallow project "
-        "records [{title, team, description, submission_url}]."
+        "Fetch a hackathon submissions page and extract all project records in one step. "
+        "Returns [{title, team, description, submission_url}]. "
+        "Use this instead of fetch_page + extract_projects_from_html separately."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "html": {"type": "string", "description": "Raw HTML of the submissions page."},
-            "base_url": {"type": "string", "description": "Base URL for resolving relative links."},
+            "url": {"type": "string", "description": "The hackathon submissions page URL."},
         },
-        "required": ["html", "base_url"],
+        "required": ["url"],
     },
 }
 
@@ -313,8 +313,7 @@ WRITE_JUDGMENT_REPORT = {
 # ── Tool sets per agent ────────────────────────────────────────────────────────
 
 SCOUT_TOOLS = [
-    FETCH_PAGE,
-    EXTRACT_PROJECTS_FROM_HTML,
+    FETCH_AND_EXTRACT_PROJECTS,
     ENRICH_PROJECT,
     WRITE_PROJECT_DESCRIPTION,
     CLUSTER_PROJECTS,

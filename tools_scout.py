@@ -372,11 +372,24 @@ def _domain_label(url: str) -> str:
         return "Hackathon"
 
 
+# ── Combined fetch+extract tool (avoids passing multi-MB HTML through context) ─
+
+def fetch_and_extract_projects(url: str) -> list[dict]:
+    """
+    Fetch the hackathon page and extract all submission records in one step.
+    The raw HTML never enters the agent context — only the extracted project list.
+    Returns [{title, team, description, submission_url}].
+    """
+    html = fetch_page(url)
+    if not html:
+        return []
+    return extract_projects_from_html(html, url)
+
+
 # ── Tool map for the Scout agent ───────────────────────────────────────────────
 
 SCOUT_TOOLS_MAP = {
-    "fetch_page": fetch_page,
-    "extract_projects_from_html": extract_projects_from_html,
+    "fetch_and_extract_projects": fetch_and_extract_projects,
     "enrich_project": enrich_project,
     "write_project_description": write_project_description,
     "cluster_projects": cluster_projects,
@@ -394,15 +407,14 @@ You are Verdict's Scout agent — an autonomous competitive intelligence system.
 Your mission: given a hackathon URL, produce a complete field report.
 
 Process:
-1. fetch_page(url) to get the submissions listing HTML
-2. extract_projects_from_html(html, base_url) to get shallow project records
-3. For every project: enrich_project(project) then write_project_description(project)
+1. fetch_and_extract_projects(url) to fetch the hackathon page and extract all submission records
+2. For every project: enrich_project(project) then write_project_description(project)
    — do these in a loop, one project at a time
-4. cluster_projects(all_enriched_projects) to theme-group them
-5. identify_gaps(projects, clusters)
-6. identify_threats(projects)
-7. pick_favorite(projects, clusters, gaps)
-8. write_scout_report(source_url, projects, clusters, gaps, threats, favorite)
+3. cluster_projects(all_enriched_projects) to theme-group them
+4. identify_gaps(projects, clusters)
+5. identify_threats(projects)
+6. pick_favorite(projects, clusters, gaps)
+7. write_scout_report(source_url, projects, clusters, gaps, threats, favorite)
    — this saves the report and returns the verdict ID
 
 Important:
